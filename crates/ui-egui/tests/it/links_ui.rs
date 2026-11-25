@@ -1,5 +1,5 @@
-//! Headless UI test of the community links: Help menu commands, the header Discord button, the
-//! About dialog and the Home (Import) screen.
+//! Headless UI test of the project links and the app's name: Help menu commands, the About
+//! dialog and the Home (Import) screen.
 //!
 //! Set `FILMCRAFT_UI_SNAPSHOT_DIR=<dir>` to also render the window offscreen with wgpu and write
 //! `links-*.png` there; without it no GPU is needed.
@@ -20,7 +20,7 @@ impl Driver {
 }
 
 #[test]
-fn community_links_everywhere() {
+fn project_links_and_app_name_everywhere() {
     let mut d = Driver::demo();
     // Help menu: every link is a command that reports the URL it opened.
     for (id, _, url) in links::ALL {
@@ -32,26 +32,35 @@ fn community_links_everywhere() {
     for (id, label, _) in links::ALL {
         assert!(text.contains(id) && text.contains(label), "Help menu lists {id}");
     }
-    // Header: the Discord button is always there.
-    assert_eq!(d.ids("header.discord"), vec!["header.discord".to_string()]);
+    // The upstream build's community link commands are gone from the Help menu.
+    for gone in ["help.discord", "help.website", "help.appPage"] {
+        assert!(!text.contains(gone), "Help menu still lists {gone}");
+    }
+    // Header: no community button (the upstream build had a Discord button there).
+    assert!(d.ids("header.discord").is_empty());
     d.snapshot("header");
-    // About dialog: Discord first, then website, app page, GitHub, issues.
+    // About dialog: the app's name as plain text where the upstream build drew the brand
+    // wordmark, the "Based on" line, then GitHub and issues.
     d.ok("engine.execute", json!({"command": "app.about", "params": {}}));
     d.frames(3);
     let about = d.ids("about.");
-    for id in ["about.discord", "about.website", "about.appPage", "about.github", "about.reportIssue"] {
+    for id in ["about.appName", "about.basedOn", "about.github", "about.reportIssue"] {
         assert!(about.iter().any(|a| a == id), "{id} in {about:?}");
+    }
+    assert_eq!(d.find_element("about.appName").map(|e| e["label"].clone()), Some(json!("FilmCraft")));
+    assert_eq!(d.find_element("about.basedOn").map(|e| e["label"].clone()), Some(json!(filmcraft_ui_egui::brand::BASED_ON)));
+    for id in ["about.discord", "about.website", "about.appPage"] {
+        assert!(!about.iter().any(|a| a == id), "{id} in {about:?}");
     }
     d.snapshot("about");
     d.ok("ui.key", json!({"key": "Escape"}));
     d.frames(3);
     assert!(d.ids("about.").is_empty(), "Escape closes About");
-    // Home screen (Import mode): community links.
+    // Home screen (Import mode): the app's name as plain text, then the project links.
     d.ok("engine.execute", json!({"command": "mode.import", "params": {}}));
     d.frames(3);
+    assert_eq!(d.find_element("import.appName").map(|e| e["label"].clone()), Some(json!("FilmCraft")));
     let home = d.ids("import.link.");
-    for id in ["import.link.discord", "import.link.website", "import.link.appPage", "import.link.github"] {
-        assert!(home.iter().any(|a| a == id), "{id} in {home:?}");
-    }
+    assert_eq!(home, vec!["import.link.github".to_string(), "import.link.reportIssue".to_string()]);
     d.snapshot("home");
 }
