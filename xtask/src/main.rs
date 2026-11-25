@@ -4,8 +4,9 @@
 //!   listed same-layer edges, L0 codec crates depend on `bitstream` only, no UI/OS crates below L5).
 //! - `wasm`: `cargo check --target wasm32-unknown-unknown` for every crate in L0–L4, the egui UI
 //!   and the web app.
-//! - `web [--dev] [--serve PORT]`: build the web app (`apps/filmcraft-web`) into
-//!   `<target>/web/dist` with `wasm-bindgen` (docs/web.md); `--serve` serves it on localhost.
+//! - `web [--dev] [--serve PORT] [--no-default-features] [--features LIST]`: build the web app
+//!   (`apps/filmcraft-web`) into `<target>/web/dist` with `wasm-bindgen` (docs/web.md); `--serve`
+//!   serves it on localhost; the feature flags go to its `cargo build`.
 //! - `assets`: every asset file (image, icon, font, LUT, audio, video…) has a complete
 //!   `<file>.attribution` sidecar and an entry in `ATTRIBUTION.md` (standards/clean-room.md).
 //! - `fixtures [crate…]`: pre-generate the ffmpeg fixture matrix of the oracle tests (runs each
@@ -270,13 +271,31 @@ fn target_dir() -> std::path::PathBuf {
     std::env::var_os("CARGO_TARGET_DIR").map(std::path::PathBuf::from).unwrap_or_else(|| std::path::PathBuf::from("target"))
 }
 
+/// The `cargo build` arguments of `cargo xtask web`: the wasm target, the web crate, the profile,
+/// and the Cargo feature flags given to the xtask (`--no-default-features`, `--features LIST`),
+/// which go to this build only, not to `wasm-bindgen` or `wasm-opt`.
+fn web_build_args(args: &[String], dev: bool) -> Result<Vec<String>, String> {
+    let profile = if dev { "dev" } else { "release" };
+    let mut out: Vec<String> =
+        ["build", "--target", "wasm32-unknown-unknown", "-p", "filmcraft-web", "--profile", profile].iter().map(|a| a.to_string()).collect();
+    if args.iter().any(|a| a == "--no-default-features") {
+        out.push("--no-default-features".into());
+    }
+    if let Some(i) = args.iter().position(|a| a == "--features") {
+        match args.get(i + 1) {
+            Some(list) if !list.starts_with("--") => out.extend(["--features".to_string(), list.clone()]),
+            _ => return Err("web: --features needs a comma-separated list".into()),
+        }
+    }
+    Ok(out)
+}
+
 /// Build the web app into `<target>/web/dist` (see docs/web.md).
 fn web(args: &[String]) -> Result<(), String> {
     let dev = args.iter().any(|a| a == "--dev");
     let serve = args.iter().position(|a| a == "--serve").map(|i| args.get(i + 1).and_then(|p| p.parse::<u16>().ok()).unwrap_or(8765));
-    let profile = if dev { "dev" } else { "release" };
     let mut build = Command::new(env!("CARGO"));
-    build.args(["build", "--target", "wasm32-unknown-unknown", "-p", "filmcraft-web", "--profile", profile]);
+    build.args(web_build_args(args, dev)?);
     run(&mut build)?;
     let out = Command::new("wasm-bindgen")
         .arg("--version")
@@ -425,6 +444,27 @@ fn served_path(root: &std::path::Path, request_path: &str) -> std::path::PathBuf
     } else {
         // A path that cannot name a child of the document root deliberately misses.
         root.join(".invalid-request-path")
+    }
+}
+
+#[cfg(test)]
+mod web_args_tests {
+    use super::web_build_args;
+
+    fn args(a: &[&str]) -> Vec<String> {
+        a.iter().map(|s| s.to_string()).collect()
+    }
+
+    #[test]
+    fn feature_flags_reach_the_cargo_build_only() {
+        let plain = web_build_args(&args(&["--dev"]), true).unwrap();
+        assert!(plain.iter().all(|a| !a.contains("feature")), "{plain:?}");
+        let built = web_build_args(&args(&["--no-default-features", "--serve", "8000", "--features", "a,b"]), false).unwrap();
+        assert!(built.ends_with(&args(&["--no-default-features", "--features", "a,b"])), "{built:?}");
+        assert!(built.contains(&"release".to_string()) && !built.contains(&"--serve".to_string()), "{built:?}");
+        for bad in [&["--features"][..], &["--features", "--dev"][..]] {
+            assert!(web_build_args(&args(bad), false).is_err(), "{bad:?}");
+        }
     }
 }
 
@@ -585,7 +625,7 @@ fn main() -> ExitCode {
             ico::run(&rest.iter().map(String::as_str).collect::<Vec<_>>())
         }
         _ => Err(
-            "usage: cargo xtask <layers|assets|wasm|web [--dev] [--serve PORT]|fixtures [crate…]|parity [--area menus|effects|transitions] [--reference FILE] [--out FILE] [--min PERCENT]|ico OUT IN…|version [set X.Y.Z]|ci|bench [args]|bench-playback [args]>"
+            "usage: cargo xtask <layers|assets|wasm|web [--dev] [--serve PORT] [--no-default-features] [--features LIST]|fixtures [crate…]|parity [--area menus|effects|transitions] [--reference FILE] [--out FILE] [--min PERCENT]|ico OUT IN…|version [set X.Y.Z]|ci|bench [args]|bench-playback [args]>"
                 .into(),
         ),
     };

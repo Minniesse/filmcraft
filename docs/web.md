@@ -17,6 +17,7 @@ fallback). It is a static site: one `.wasm`, its `wasm-bindgen` JavaScript glue,
 cargo xtask web                 # release build → target/web/dist (index.html, filmcraft_web.js, filmcraft_web_bg.wasm, …)
 cargo xtask web --dev           # unoptimised build (faster to compile, slow to run)
 cargo xtask web --serve 8765    # build, then serve dist on http://127.0.0.1:8765/
+cargo xtask web --no-default-features --features LIST   # pass Cargo features to the web crate's build
 ```
 
 `--serve` is a tiny localhost-only static server that sends `Cross-Origin-Opener-Policy` /
