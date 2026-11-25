@@ -23,7 +23,7 @@ Exactly three colours:
 
 ## Provenance
 
-The owner drew it in ArtCraft as a 2880 px engraving-style image, vectorised with potrace, which keys
+The owner drew it as a 2880 px engraving-style image, vectorised with potrace, which keys
 the drawing to the three-colour palette and traces the ink. Licence: [LICENSE.txt](LICENSE.txt) (MIT OR Apache-2.0).
 
 ## Files
